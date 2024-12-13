@@ -38,7 +38,9 @@ class GameData implements Serializable {
         return roomId;
     }
 
+
     public String getPlayerRole() {
         return playerRole;
     }
+
 }
