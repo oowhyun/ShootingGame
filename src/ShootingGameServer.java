@@ -3,23 +3,32 @@ import java.net.*;
 import java.util.*;
 import java.util.List;
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 
 public class ShootingGameServer {
     private static final int PORT = 12345;
     private final List<Room> rooms = Collections.synchronizedList(new ArrayList<>());
     private final Map<String, Room> clientRoomMap = Collections.synchronizedMap(new HashMap<>());
+    private final ServerGUI gui;
+
+    public ShootingGameServer() {
+        gui = new ServerGUI();
+    }
 
     public void start() {
         System.out.println("서버가 시작되었습니다. 클라이언트를 기다리는 중...");
+        gui.log("서버가 시작되었습니다. 클라이언트를 기다리는 중...");
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             while (true) {
                 Socket socket = serverSocket.accept();
                 System.out.println("새 클라이언트 연결: " + socket.getInetAddress().getHostAddress());
+                gui.log("새 클라이언트 연결: " + socket.getInetAddress().getHostAddress());
                 new ClientHandler(socket).start();
             }
         } catch (IOException e) {
+            gui.log("서버 에러: " + e.getMessage());
             System.out.println("서버 에러: " + e.getMessage());
         }
     }
@@ -29,6 +38,7 @@ public class ShootingGameServer {
             if (!room.isFull()) {
                 room.addPlayer(client);
                 clientRoomMap.put(client.getClientId(), room);
+                updateRoomTable();
                 return room;
             }
         }
@@ -37,7 +47,20 @@ public class ShootingGameServer {
         newRoom.addPlayer(client);
         rooms.add(newRoom);
         clientRoomMap.put(client.getClientId(), newRoom);
+        updateRoomTable();
         return newRoom;
+    }
+
+    private void updateRoomTable() {
+        SwingUtilities.invokeLater(() -> {
+            DefaultTableModel model = gui.getRoomTableModel();
+            model.setRowCount(0); // 기존 데이터 초기화
+            synchronized (rooms) {
+                for (Room room : rooms) {
+                    model.addRow(new Object[]{room.getRoomId(), room.getPlayerCount()});
+                }
+            }
+        });
     }
 
     protected class ClientHandler extends Thread {
@@ -65,6 +88,9 @@ public class ShootingGameServer {
                 Room room = findOrCreateRoom(this);
                 String playerRole = room.getPlayerRole(this);
 
+                gui.log("클라이언트 연결됨: " + clientId + " (방: " + room.getRoomId() + ")");
+                gui.addClient(clientId, room.getRoomId());
+
                 out.writeObject(new GameData(clientId, null, null, room.getRoomId(), playerRole));
                 out.flush();
 
@@ -75,6 +101,7 @@ public class ShootingGameServer {
                 }
             } catch (IOException | ClassNotFoundException e) {
                 System.out.println("클라이언트 연결 종료: " + clientId);
+                gui.log("클라이언트 연결 종료: " + clientId);
 
                 Room room = clientRoomMap.get(clientId);
                 if (room != null) {
@@ -82,6 +109,7 @@ public class ShootingGameServer {
                     if (room.isEmpty()) {
                         rooms.remove(room);
                     }
+                    updateRoomTable();
                 }
             } finally {
                 try {
@@ -91,7 +119,6 @@ public class ShootingGameServer {
                 }
             }
         }
-
         public void sendData(GameData data) throws IOException {
             out.writeObject(data);
             out.flush();
@@ -100,6 +127,48 @@ public class ShootingGameServer {
 
     public static void main(String[] args) {
         new ShootingGameServer().start();
+    }
+}
+
+class ServerGUI {
+    private final JFrame frame;
+    private final JTextArea logArea;
+    private final JTable roomTable;
+    private final DefaultTableModel roomTableModel;
+
+    public ServerGUI() {
+        frame = new JFrame("Shooting Game - Server");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(600, 400);
+        frame.setLayout(new BorderLayout());
+
+        // 로그 창
+        logArea = new JTextArea();
+        logArea.setEditable(false);
+        JScrollPane logScrollPane = new JScrollPane(logArea);
+        logScrollPane.setBorder(BorderFactory.createTitledBorder("서버 로그"));
+
+        // 방 정보 테이블
+        roomTableModel = new DefaultTableModel(new Object[]{"방 ID", "플레이어 수"}, 0);
+        roomTable = new JTable(roomTableModel);
+        JScrollPane tableScrollPane = new JScrollPane(roomTable);
+        tableScrollPane.setBorder(BorderFactory.createTitledBorder("방 상태"));
+
+        frame.add(logScrollPane, BorderLayout.CENTER);
+        frame.add(tableScrollPane, BorderLayout.EAST);
+        frame.setVisible(true);
+    }
+
+    public void log(String message) {
+        SwingUtilities.invokeLater(() -> logArea.append(message + "\n"));
+    }
+
+    public void addClient(String clientId, String roomId) {
+        log("클라이언트 추가: " + clientId + " (방: " + roomId + ")");
+    }
+
+    public DefaultTableModel getRoomTableModel() {
+        return roomTableModel;
     }
 }
 
@@ -133,6 +202,10 @@ class Room {
         return roomId;
     }
 
+    public synchronized int getPlayerCount() {
+        return players.size();
+    }
+
     public String getPlayerRole(ShootingGameServer.ClientHandler player) {
         return players.indexOf(player) == 0 ? "Player1" : "Player2";
     }
@@ -141,7 +214,7 @@ class Room {
         for (ShootingGameServer.ClientHandler player : players) {
             if (player != sender) {
                 try {
-                    player.sendData(data); // 데이터 전송
+                    player.sendData(data);
                 } catch (IOException e) {
                     System.out.println("데이터 전송 오류: " + player.getClientId());
                 }
