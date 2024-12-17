@@ -1,10 +1,11 @@
+import java.awt.*;
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.List;
+import java.util.Timer;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
-import java.awt.*;
 
 public class ShootingGameServer {
     private static final int PORT = 12345;
@@ -54,7 +55,7 @@ public class ShootingGameServer {
     private void updateRoomTable() {
         SwingUtilities.invokeLater(() -> {
             DefaultTableModel model = gui.getRoomTableModel();
-            model.setRowCount(0); // 기존 데이터 초기화
+            model.setRowCount(0);
             synchronized (rooms) {
                 for (Room room : rooms) {
                     model.addRow(new Object[]{room.getRoomId(), room.getPlayerCount()});
@@ -68,13 +69,28 @@ public class ShootingGameServer {
         private ObjectOutputStream out;
         private ObjectInputStream in;
         private String clientId;
+        private int hp = 5;
+        private String playerRole;
 
+        public int getHp() {
+            return hp;
+        }
+
+        // HP setter
+        public void setHp(int hp) {
+            this.hp = hp;
+        }
         public ClientHandler(Socket socket) {
             this.socket = socket;
         }
 
         public String getClientId() {
             return clientId;
+        }
+
+
+        public String getPlayerRole() {
+            return playerRole;
         }
 
         @Override
@@ -86,18 +102,27 @@ public class ShootingGameServer {
                 clientId = UUID.randomUUID().toString();
 
                 Room room = findOrCreateRoom(this);
-                String playerRole = room.getPlayerRole(this);
+                playerRole = room.getPlayerRole(this);
 
                 gui.log("클라이언트 연결됨: " + clientId + " (방: " + room.getRoomId() + ")");
                 gui.addClient(clientId, room.getRoomId());
 
-                out.writeObject(new GameData(clientId, null, null, room.getRoomId(), playerRole));
+                GameData initialData = new GameData(clientId, new Rectangle(), new ArrayList<>(), new ArrayList<>(), room.getRoomId(), playerRole, hp);
+                out.writeObject(initialData);
                 out.flush();
 
                 while (true) {
                     GameData data = (GameData) in.readObject();
                     data.setClientId(clientId);
-                    room.broadcast(data, this);
+
+                    // HP 감소 처리
+                    if (data.getHp() < hp) {
+                        hp = data.getHp();
+                        if (hp < 0) hp = 0;
+                    }
+
+                    room.processGameData(data, this);
+                    room.checkGameOver();
                 }
             } catch (IOException | ClassNotFoundException e) {
                 System.out.println("클라이언트 연결 종료: " + clientId);
@@ -119,6 +144,7 @@ public class ShootingGameServer {
                 }
             }
         }
+
         public void sendData(GameData data) throws IOException {
             out.writeObject(data);
             out.flush();
@@ -127,6 +153,195 @@ public class ShootingGameServer {
 
     public static void main(String[] args) {
         new ShootingGameServer().start();
+    }
+}
+
+class Room {
+    private final String roomId;
+    private final List<ShootingGameServer.ClientHandler> players = new ArrayList<>(2);
+    private final List<Item> items = new ArrayList<>(); // 아이템 리스트
+    private static final long ITEM_LIFETIME = 10000; // 10초 후 아이템 파괴
+    private static final int ITEM_SPAWN_INTERVAL = 5000; // 아이템 생성 주기 (5초마다 생성)
+
+
+
+    public Room(String roomId) {
+        this.roomId = roomId;
+    }
+    private void startItemManagement() {
+        // 아이템 생성 및 파괴 관리
+        Timer itemTimer = new Timer();
+        itemTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                // 아이템 생성
+                spawnItem();
+
+                // 아이템 만료 처리
+                removeExpiredItems();
+            }
+        }, 0, ITEM_SPAWN_INTERVAL);
+    }
+
+    private synchronized void spawnItem() {
+        Random random = new Random();
+        int x = random.nextInt(100, 400); // 랜덤 x 위치 (100~400)
+        int y = random.nextInt(100, 400); // 랜덤 y 위치 (100~400)
+
+        String itemType = random.nextBoolean() ? "hp" : "speed"; // 50% 확률로 HP 또는 Speed 아이템 생성
+        Item newItem = new Item("item" + UUID.randomUUID(), new Rectangle(x, y, 30, 30), itemType);
+
+        items.add(newItem);
+        broadcastItemUpdate(newItem);
+    }
+
+
+    private synchronized void removeExpiredItems() {
+        long currentTime = System.currentTimeMillis();
+        Iterator<Item> iterator = items.iterator();
+
+        while (iterator.hasNext()) {
+            Item item = iterator.next();
+            if (currentTime - item.getCreationTime() > ITEM_LIFETIME) {
+                iterator.remove(); // 아이템 제거
+                broadcastItemRemoval(item.getId()); // 아이템 제거 정보 브로드캐스트
+            }
+        }
+    }
+    private void broadcastItemUpdate(Item newItem) {
+        GameData itemData = new GameData(null, null, null, items, roomId, null, 0);
+        itemData.setNewItem(newItem);
+
+        for (ShootingGameServer.ClientHandler player : players) {
+            try {
+                player.sendData(itemData);
+            } catch (IOException e) {
+                System.out.println("아이템 정보 전송 오류: " + player.getClientId());
+            }
+        }
+    }
+
+    private void broadcastItemRemoval(String itemId) {
+        GameData removalData = new GameData(null, null, null, items, roomId, null, 0);
+        removalData.setItemRemoved(itemId);
+
+        for (ShootingGameServer.ClientHandler player : players) {
+            try {
+                player.sendData(removalData);
+            } catch (IOException e) {
+                System.out.println("아이템 삭제 정보 전송 오류: " + player.getClientId());
+            }
+        }
+    }
+    public synchronized void addPlayer(ShootingGameServer.ClientHandler player) {
+        if (players.size() < 2) {
+            players.add(player);
+        }
+    }
+
+    public synchronized void removePlayer(ShootingGameServer.ClientHandler player) {
+        players.remove(player);
+    }
+
+    public synchronized boolean isFull() {
+        return players.size() == 2;
+    }
+
+    public synchronized boolean isEmpty() {
+        return players.isEmpty();
+    }
+
+    public String getRoomId() {
+        return roomId;
+    }
+
+    public synchronized int getPlayerCount() {
+        return players.size();
+    }
+
+    public String getPlayerRole(ShootingGameServer.ClientHandler player) {
+        return players.indexOf(player) == 0 ? "Player1" : "Player2";
+    }
+
+    public synchronized void processGameData(GameData data, ShootingGameServer.ClientHandler sender) {
+        // 미사일 처리
+        for (Missile missile : data.getMissiles()) {
+            missile.update();
+
+            // 상대 플레이어 충돌 처리
+            for (ShootingGameServer.ClientHandler player : players) {
+                if (!player.equals(sender)) {
+                    Rectangle playerBounds = new Rectangle(50, 50, 50, 50); // 플레이어 크기 설정
+                    if (playerBounds.intersects(missile.getBounds())) {
+                        data.setHp(player.getHp());  // HP 변경
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 아이템 충돌 처리
+        for (Iterator<Item> iterator = items.iterator(); iterator.hasNext();) {
+            Item item = iterator.next();
+            if (data.getPlayer().intersects(item.getBounds())) {
+                if (item.getType().equals("hp")) {
+                    // HP 아이템 획득 시 체력 증가
+                    sender.setHp(Math.min(sender.getHp() + 1, 5)); // 최대 HP는 5로 제한
+                }
+                iterator.remove(); // 아이템 제거
+                broadcastItemRemoval(item.getId()); // 아이템 제거 정보 브로드캐스트
+            }
+        }
+
+        // HP 갱신 후 데이터 전송
+        data.setHp(sender.getHp());  // 갱신된 HP 반영
+        broadcast(data, sender);  // 다른 플레이어들에게 업데이트된 데이터 전송
+    }
+
+    public void broadcast(GameData data, ShootingGameServer.ClientHandler sender) {
+        for (ShootingGameServer.ClientHandler player : players) {
+            if (player != sender) {
+                try {
+                    player.sendData(data);  // 갱신된 데이터 전송
+                } catch (IOException e) {
+                    System.out.println("데이터 전송 오류: " + player.getClientId());
+                }
+            }
+        }
+    }
+
+    public synchronized void checkGameOver() {
+        if (players.size() != 2) return;
+
+        ShootingGameServer.ClientHandler player1 = players.get(0);
+        ShootingGameServer.ClientHandler player2 = players.get(1);
+
+        int player1Hp = player1.getHp();
+        int player2Hp = player2.getHp();
+
+        if (player1Hp <= 0 || player2Hp <= 0) {
+            String winner = player1Hp > 0 ? "Player1" : "Player2";
+            broadcastGameOver(winner);
+        }
+    }
+
+
+
+    public List<Item> getItems() {
+        return items;
+    }
+
+    private void broadcastGameOver(String winner) {
+        for (ShootingGameServer.ClientHandler player : players) {
+            try {
+                GameData gameOverData = new GameData(player.getClientId(), null, null, null, roomId, player.getPlayerRole(), player.getHp());
+                gameOverData.setGameOver(true);
+                gameOverData.setWinner(winner.equals(player.getPlayerRole()));
+                player.sendData(gameOverData);
+            } catch (IOException e) {
+                System.out.println("게임 종료 메시지 전송 오류: " + player.getClientId());
+            }
+        }
     }
 }
 
@@ -169,56 +384,5 @@ class ServerGUI {
 
     public DefaultTableModel getRoomTableModel() {
         return roomTableModel;
-    }
-}
-
-class Room {
-    private final String roomId;
-    private final List<ShootingGameServer.ClientHandler> players = new ArrayList<>(2);
-
-    public Room(String roomId) {
-        this.roomId = roomId;
-    }
-
-    public synchronized void addPlayer(ShootingGameServer.ClientHandler player) {
-        if (players.size() < 2) {
-            players.add(player);
-        }
-    }
-
-    public synchronized void removePlayer(ShootingGameServer.ClientHandler player) {
-        players.remove(player);
-    }
-
-    public synchronized boolean isFull() {
-        return players.size() == 2;
-    }
-
-    public synchronized boolean isEmpty() {
-        return players.isEmpty();
-    }
-
-    public String getRoomId() {
-        return roomId;
-    }
-
-    public synchronized int getPlayerCount() {
-        return players.size();
-    }
-
-    public String getPlayerRole(ShootingGameServer.ClientHandler player) {
-        return players.indexOf(player) == 0 ? "Player1" : "Player2";
-    }
-
-    public void broadcast(GameData data, ShootingGameServer.ClientHandler sender) {
-        for (ShootingGameServer.ClientHandler player : players) {
-            if (player != sender) {
-                try {
-                    player.sendData(data);
-                } catch (IOException e) {
-                    System.out.println("데이터 전송 오류: " + player.getClientId());
-                }
-            }
-        }
     }
 }
