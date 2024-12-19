@@ -40,7 +40,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private List<SpeedItem> speedItems; // 아이템 리스트
     private Image hpItemImage;  // heart.png 이미지
     private List<HpItem> hpItems; // HP 아이템 리스트
-
+    private Image fanceImage;
+    private Rectangle wallBounds; // 벽의 경계 영역
 
 
     public ShootingGameClient() {
@@ -71,7 +72,14 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             speedItems = new ArrayList<>();
             hpItemImage = new ImageIcon("images/heart.png").getImage();
             hpItems = new ArrayList<>();
+            fanceImage = new ImageIcon("images/fance.png").getImage();
+            // 울타리 크기 및 위치 조정
+            int wallWidth = 500;  // 울타리의 너비 (맵 가로 크기와 동일)
+            int wallHeight = 80;  // 울타리의 높이 (기존보다 더 높게 설정)
+            int wallX = 0;        // X 위치는 맵의 왼쪽 끝
+            int wallY = (600 / 2) - (wallHeight / 2);  // 맵 높이의 절반에서 울타리 높이의 절반만큼 뺌 (정중앙 배치)
 
+            wallBounds = new Rectangle(wallX, wallY, wallWidth, wallHeight);
 
             random = new Random(globalSeed);
 
@@ -97,7 +105,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
         g.drawImage(backgroundImage, 0, 0, 500, 600, this);
-
+        g.drawImage(fanceImage, wallBounds.x, wallBounds.y, wallBounds.width, wallBounds.height, this);
         g.drawImage(playerImage, playerX, playerY, 50, 50, this);
 
         synchronized (speedItems) {
@@ -201,8 +209,23 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             speed = 5; // 기본 속도로 복귀
         }
 
-        playerX = Math.max(0, Math.min(playerX, getWidth() - playerImage.getWidth(null)));
-        playerY = Math.max(0, Math.min(playerY, getHeight() - playerImage.getHeight(null)));
+        // X축 이동 제한 (맵 가로 경계)
+        playerX = Math.max(20, Math.min(playerX, getWidth() - playerImage.getWidth(null)));
+
+        // Y축 이동 제한 (플레이어 역할에 따른 영역 제한)
+        if ("Player1".equals(playerRole)) {
+            // Player1은 울타리 아래쪽에서만 이동 가능
+            playerY = Math.max(
+                    wallBounds.y + wallBounds.height - 20, // 울타리 아래쪽 경계
+                    Math.min(playerY, getHeight() - playerImage.getHeight(null)) // 화면 하단 경계
+            );
+        } else {
+            // Player2는 울타리 위쪽에서만 이동 가능
+            playerY = Math.max(
+                    20, // 화면 위쪽 경계
+                    Math.min(playerY, wallBounds.y - 20) // 울타리 상단 경계까지 이동 가능
+            );
+        }
 
         // 미사일 업데이트
         missiles.forEach(Missile::update);
