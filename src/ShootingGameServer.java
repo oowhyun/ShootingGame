@@ -170,21 +170,6 @@ class Room {
         this.roomId = roomId;
     }
 
-    private void startItemManagement() {
-        // 아이템 생성 및 파괴 관리
-        itemTimer = new Timer();
-        itemTimer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                // 아이템 생성
-                spawnItem();
-
-                // 아이템 만료 처리
-                removeExpiredItems();
-            }
-        }, 0, ITEM_SPAWN_INTERVAL);
-    }
-
     private synchronized void spawnItem() {
         Random random = new Random();
         int x = random.nextInt(100, 400); // 랜덤 x 위치 (100~400)
@@ -196,6 +181,7 @@ class Room {
         items.add(newItem);
         broadcastItemUpdate(newItem);  // 모든 플레이어에게 아이템 업데이트 전송
     }
+
 
     private synchronized void removeExpiredItems() {
         long currentTime = System.currentTimeMillis();
@@ -261,6 +247,22 @@ class Room {
             }
         }
     }
+    private synchronized void startItemManagement() {
+        if (itemTimer != null) return; // 이미 시작된 경우 중복 실행 방지
+
+        // 아이템 생성 및 파괴 관리
+        itemTimer = new Timer();
+        itemTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                // 아이템 생성
+                spawnItem();
+
+                // 아이템 만료 처리
+                removeExpiredItems();
+            }
+        }, 0, ITEM_SPAWN_INTERVAL);
+    }
 
     public synchronized void removePlayer(ShootingGameServer.ClientHandler player) {
         players.remove(player);
@@ -303,7 +305,6 @@ class Room {
             }
         }
 
-        // 아이템 충돌 처리
         for (Iterator<Item> iterator = items.iterator(); iterator.hasNext();) {
             Item item = iterator.next();
             if (data.getPlayer().intersects(item.getBounds())) {
@@ -316,9 +317,9 @@ class Room {
             }
         }
 
-        // HP 갱신 후 데이터 전송
-        data.setHp(sender.getHp());  // 갱신된 HP 반영
-        broadcast(data, sender);  // 다른 플레이어들에게 업데이트된 데이터 전송
+        // 갱신된 HP 반영
+        data.setHp(sender.getHp());
+        broadcast(data, sender); // 다른 플레이어들에게 업데이트된 데이터 전송
     }
 
     public void broadcast(GameData data, ShootingGameServer.ClientHandler sender) {

@@ -125,6 +125,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         synchronized (otherPlayers) {
             for (GameData data : otherPlayers.values()) {
                 Rectangle player = data.getPlayer();
+                if (player.x == 0 && player.y == 0) continue; // (0,0)에 위치한 데이터 무시
                 Image otherPlayerImage = "Player1".equals(data.getPlayerRole())
                         ? new ImageIcon("images/kirby.png").getImage()
                         : new ImageIcon("images/dididi.png").getImage();
@@ -297,16 +298,71 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
 
     private void sendPlayerData() {
         try {
-            String roomId = "room_1";  // 고정된 방 ID 예시
-
-            GameData data = new GameData(clientId, new Rectangle(playerX, playerY, playerImage.getWidth(null), playerImage.getHeight(null)),
-                    new ArrayList<>(missiles), new ArrayList<>(speedItems), roomId, playerRole, playerHP);
-            out.writeObject(data);
+            String roomId = "room_1"; // 고정된 방 ID
+            GameData data = new GameData(
+                    clientId,
+                    new Rectangle(playerX, playerY, playerImage.getWidth(null), playerImage.getHeight(null)),
+                    new ArrayList<>(missiles),
+                    new ArrayList<>(speedItems),
+                    roomId,
+                    playerRole,
+                    playerHP
+            );
+            out.writeObject(data); // 서버로 데이터 전송
             out.flush();
         } catch (IOException e) {
             System.err.println("데이터 전송 오류: " + e.getMessage());
         }
     }
+
+    private void receiveData() {
+        try {
+            while (true) {
+                GameData serverData = (GameData) in.readObject();
+
+                synchronized (otherPlayers) {
+                    if (serverData.getPlayer() == null) {
+                        otherPlayers.remove(serverData.getClientId());
+                    } else {
+                        otherPlayers.put(serverData.getClientId(), serverData);
+                    }
+                }
+
+                // 아이템 정보 업데이트
+                if (serverData.getSpeedItems() != null) {
+                    synchronized (speedItems) {
+                        speedItems.clear();
+                        speedItems.addAll(serverData.getSpeedItems());
+                    }
+                }
+                if (serverData.getHpItems() != null) {
+                    synchronized (hpItems) {
+                        hpItems.clear();
+                        hpItems.addAll(serverData.getHpItems());
+                    }
+                }
+
+                // 게임 종료 및 승리 정보
+                if (serverData.isGameOver()) {
+                    gameOver = true;
+                    isWinner = serverData.isWinner();
+                }
+
+                // 다른 플레이어의 HP 업데이트
+                synchronized (otherPlayers) {
+                    GameData otherPlayerData = otherPlayers.get(serverData.getClientId());
+                    if (otherPlayerData != null) {
+                        otherPlayerData.setHp(serverData.getHp());
+                    }
+                }
+
+                repaint(); // 화면 갱신
+            }
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("서버와의 연결이 끊겼습니다: " + e.getMessage());
+        }
+    }
+
     private void generateRandomItems() {
         int x = random.nextInt(300) + 100; // 100 ~ 400 범위 (가로)
         int y = random.nextInt(400) + 100; // 100 ~ 500 범위 (세로)
@@ -335,44 +391,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                     iterator.remove(); // 비활성화된 아이템 제거
                 }
             }
-        }
-    }
-
-
-    private void receiveData() {
-        try {
-            while (true) {
-                GameData serverData = (GameData) in.readObject();
-
-                synchronized (otherPlayers) {
-                    if (serverData.getPlayer() == null) {
-                        otherPlayers.remove(serverData.getClientId());
-                    } else {
-                        otherPlayers.put(serverData.getClientId(), serverData);
-                    }
-                }
-
-                // 아이템 정보 업데이트
-                if (serverData.getSpeedItems() != null) {
-                    synchronized (speedItems) {
-                        speedItems.clear();
-                        speedItems.addAll(serverData.getSpeedItems());
-                    }
-                }
-
-                // 게임 종료 및 승리 정보
-                if (serverData.isGameOver()) {
-                    gameOver = true;
-                    isWinner = serverData.isWinner();
-                }
-
-                // 다른 플레이어의 HP 업데이트
-                synchronized (otherPlayers) {
-                    otherPlayers.get(serverData.getClientId()).setHp(serverData.getHp());
-                }
-            }
-        } catch (IOException | ClassNotFoundException e) {
-            System.err.println("서버와의 연결이 끊겼습니다.");
         }
     }
 
