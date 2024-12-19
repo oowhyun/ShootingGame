@@ -31,7 +31,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private boolean isWinner = false; // 승리 여부를 저장하는 변수
     private int lastDirectionX = 0;  // 마지막 X 방향
     private int lastDirectionY = -1; // 마지막 Y 방향 (기본적으로 위쪽)
-
+    private Random random;  // 랜덤 객체 추가
+    private long globalSeed = 123456789L;
     private int playerHP = 5;  // 자신의 HP
     private int speed = 5; // 기본 이동 속도
     private long speedBoostEndTime = 0; // 속도 증가 지속 시간
@@ -72,7 +73,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             hpItems = new ArrayList<>();
 
 
-
+            random = new Random(globalSeed);
 
             keys = new boolean[256];
             missiles = new ArrayList<>();
@@ -300,8 +301,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
 
             GameData data = new GameData(clientId, new Rectangle(playerX, playerY, playerImage.getWidth(null), playerImage.getHeight(null)),
                     new ArrayList<>(missiles), new ArrayList<>(speedItems), roomId, playerRole, playerHP);
-
-
             out.writeObject(data);
             out.flush();
         } catch (IOException e) {
@@ -309,9 +308,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
     }
     private void generateRandomItems() {
-        Random random = new Random();
-        int x = random.nextInt(500);
-        int y = random.nextInt(600);
+        int x = random.nextInt(300) + 100; // 100 ~ 400 범위 (가로)
+        int y = random.nextInt(400) + 100; // 100 ~ 500 범위 (세로)
 
         // 랜덤으로 SpeedItem 또는 HpItem 생성
         if (random.nextBoolean()) {
