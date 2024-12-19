@@ -2,6 +2,7 @@ import java.awt.Rectangle;
 import java.io.Serializable;
 
 class Item implements Serializable {
+    private static final long serialVersionUID = 1L;
     private final String id;
     private final Rectangle bounds;
     private final long creationTime; // 생성 시간

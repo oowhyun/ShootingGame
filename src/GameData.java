@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class GameData implements Serializable {
+    private static final long serialVersionUID = 1L;
     private String clientId;
     private Rectangle player;  // 플레이어의 위치와 크기
     private List<Missile> missiles;
@@ -17,7 +18,8 @@ public class GameData implements Serializable {
     private Item newItem;
     private String itemRemoved; // 제거된 아이템 ID
     private List<SpeedItem> speedItems;
-
+    private List<HpItem> hpItems;
+    private boolean gameStarted;
 
     // 기본 생성자
     public GameData(String clientId, Rectangle player, List<Missile> missiles, List<Item> items, String roomId, String playerRole, int hp) {
@@ -29,6 +31,7 @@ public class GameData implements Serializable {
         this.roomId = roomId;
         this.playerRole = playerRole;
         this.hp = hp;
+
     }
 
     // Getter 및 Setter 메서드들
@@ -129,8 +132,19 @@ public class GameData implements Serializable {
     public String getItemRemoved() {
         return itemRemoved;
     }
+
+    public void setSpeedItems(List<SpeedItem> speedItems) {
+        this.speedItems = speedItems;
+    }
+
     public List<SpeedItem> getSpeedItems() {
         return speedItems;
+    }
+    public List<HpItem> getHpItems() {
+        return hpItems;
+    }
+    public void setGameStarted(boolean gameStarted) {
+        this.gameStarted = gameStarted;
     }
 
 }

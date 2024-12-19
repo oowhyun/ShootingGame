@@ -18,8 +18,9 @@ public class ShootingGameServer {
     }
 
     public void start() {
-        System.out.println("서버가 시작되었습니다. 클라이언트를 기다리는 중...");
-        gui.log("서버가 시작되었습니다. 클라이언트를 기다리는 중...");
+        System.out.println("서버가 시작되었습니다.");
+        System.out.println("클라이언트를 기다리는 중...");
+        gui.log("서버가 시작되었습니다.\n클라이언트를 기다리는 중...");
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             while (true) {
@@ -162,15 +163,16 @@ class Room {
     private final List<Item> items = new ArrayList<>(); // 아이템 리스트
     private static final long ITEM_LIFETIME = 10000; // 10초 후 아이템 파괴
     private static final int ITEM_SPAWN_INTERVAL = 5000; // 아이템 생성 주기 (5초마다 생성)
-
-
+    private Timer itemTimer;
+    private boolean gameStarted = false;
 
     public Room(String roomId) {
         this.roomId = roomId;
     }
+
     private void startItemManagement() {
         // 아이템 생성 및 파괴 관리
-        Timer itemTimer = new Timer();
+        itemTimer = new Timer();
         itemTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -192,9 +194,8 @@ class Room {
         Item newItem = new Item("item" + UUID.randomUUID(), new Rectangle(x, y, 30, 30), itemType);
 
         items.add(newItem);
-        broadcastItemUpdate(newItem);
+        broadcastItemUpdate(newItem);  // 모든 플레이어에게 아이템 업데이트 전송
     }
-
 
     private synchronized void removeExpiredItems() {
         long currentTime = System.currentTimeMillis();
@@ -208,10 +209,12 @@ class Room {
             }
         }
     }
+
     private void broadcastItemUpdate(Item newItem) {
         GameData itemData = new GameData(null, null, null, items, roomId, null, 0);
         itemData.setNewItem(newItem);
 
+        // 모든 플레이어에게 아이템 생성 정보를 전송
         for (ShootingGameServer.ClientHandler player : players) {
             try {
                 player.sendData(itemData);
@@ -225,6 +228,7 @@ class Room {
         GameData removalData = new GameData(null, null, null, items, roomId, null, 0);
         removalData.setItemRemoved(itemId);
 
+        // 모든 플레이어에게 아이템 제거 정보를 전송
         for (ShootingGameServer.ClientHandler player : players) {
             try {
                 player.sendData(removalData);
@@ -233,9 +237,28 @@ class Room {
             }
         }
     }
+
     public synchronized void addPlayer(ShootingGameServer.ClientHandler player) {
         if (players.size() < 2) {
             players.add(player);
+            // 두 명의 플레이어가 모두 접속했을 때 게임을 시작하도록 체크
+            if (players.size() == 2) {
+                gameStarted = true;  // 게임 시작
+                startItemManagement();  // 아이템 생성 시작
+                broadcastGameStart();  // 게임 시작 메시지 전송
+            }
+        }
+    }
+    private void broadcastGameStart() {
+        // 게임 시작 메시지
+        for (ShootingGameServer.ClientHandler player : players) {
+            try {
+                GameData gameStartData = new GameData(player.getClientId(), null, null, null, roomId, player.getPlayerRole(), player.getHp());
+                gameStartData.setGameStarted(true);
+                player.sendData(gameStartData);
+            } catch (IOException e) {
+                System.out.println("게임 시작 메시지 전송 오류: " + player.getClientId());
+            }
         }
     }
 
@@ -325,8 +348,6 @@ class Room {
         }
     }
 
-
-
     public List<Item> getItems() {
         return items;
     }
@@ -354,7 +375,7 @@ class ServerGUI {
     public ServerGUI() {
         frame = new JFrame("Shooting Game - Server");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(600, 400);
+        frame.setSize(700, 400);
         frame.setLayout(new BorderLayout());
 
         // 로그 창
