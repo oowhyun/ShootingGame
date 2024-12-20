@@ -13,7 +13,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private ObjectInputStream in;
     private final String clientId = "player_" + UUID.randomUUID();
 
-
     private long lastItemGenerationTime = 0;
     private static final long ITEM_GENERATION_INTERVAL = 5000; // 5초
     private Timer timer;
@@ -31,17 +30,15 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private boolean isWinner = false; // 승리 여부를 저장하는 변수
     private int lastDirectionX = 0;  // 마지막 X 방향
     private int lastDirectionY = -1; // 마지막 Y 방향 (기본적으로 위쪽)
-    private Random random;  // 랜덤 객체 추가
-    private long globalSeed = 123456789L;
     private int playerHP = 5;  // 자신의 HP
     private int speed = 5; // 기본 이동 속도
     private long speedBoostEndTime = 0; // 속도 증가 지속 시간
+
     private Image speedItemImage; // 아이템 이미지
-    private List<SpeedItem> speedItems; // 아이템 리스트
     private Image hpItemImage;  // heart.png 이미지
-    private List<HpItem> hpItems; // HP 아이템 리스트
     private Image fanceImage;
     private Rectangle wallBounds; // 벽의 경계 영역
+    private final List<GameData.Item> items = new ArrayList<>(); // 수신한 아이템 목록
 
 
     public ShootingGameClient() {
@@ -69,9 +66,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             missileImage = new ImageIcon("images/starBullet.png").getImage();
             hammerImage = new ImageIcon("images/hammer.png").getImage();
             speedItemImage = new ImageIcon("images/speed.png").getImage();
-            speedItems = new ArrayList<>();
             hpItemImage = new ImageIcon("images/heart.png").getImage();
-            hpItems = new ArrayList<>();
+
             fanceImage = new ImageIcon("images/fance.png").getImage();
             // 울타리 크기 및 위치 조정
             int wallWidth = 500;  // 울타리의 너비 (맵 가로 크기와 동일)
@@ -81,7 +77,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
 
             wallBounds = new Rectangle(wallX, wallY, wallWidth, wallHeight);
 
-            random = new Random(globalSeed);
 
             keys = new boolean[256];
             missiles = new ArrayList<>();
@@ -101,69 +96,54 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
     }
 
-
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
         g.drawImage(backgroundImage, 0, 0, 500, 600, this);
+
         g.drawImage(fanceImage, wallBounds.x, wallBounds.y, wallBounds.width, wallBounds.height, this);
         g.drawImage(playerImage, playerX, playerY, 50, 50, this);
 
-        synchronized (speedItems) {
-            for (SpeedItem item : speedItems) {
-                if (item.isActive()) {
-                    item.draw(g, speedItemImage);
-                }
-            }
-        }
-        synchronized (hpItems) {
-            for (HpItem item : hpItems) {
-                if (item.isActive()) {
-                    item.draw(g, hpItemImage);
-                }
+        synchronized (items) {
+            for (GameData.Item item : items) {
+                Image itemImage = "speed".equals(item.getType()) ? speedItemImage : hpItemImage;
+                g.drawImage(itemImage, item.getX(), item.getY(), 30, 30, this);
             }
         }
 
-        // 자신의 미사일 렌더링
         for (Missile missile : missiles) {
             Image currentMissileImage = "Player1".equals(playerRole) ? missileImage : hammerImage;
-            g.drawImage(currentMissileImage, missile.getX()-20, missile.getY(), 20, 20, this);
+            g.drawImage(currentMissileImage, missile.getX() - 20, missile.getY(), 20, 20, this);
         }
 
-        // 다른 플레이어 렌더링 및 미사일
         synchronized (otherPlayers) {
             for (GameData data : otherPlayers.values()) {
                 Rectangle player = data.getPlayer();
-                if (player.x == 0 && player.y == 0) continue; // (0,0)에 위치한 데이터 무시
+                if (player.x == 0 && player.y == 0) continue;
                 Image otherPlayerImage = "Player1".equals(data.getPlayerRole())
                         ? new ImageIcon("images/kirby.png").getImage()
                         : new ImageIcon("images/dididi.png").getImage();
                 g.drawImage(otherPlayerImage, player.x, player.y, 50, 50, this);
 
-                // 다른 플레이어의 미사일 렌더링
                 for (Missile missile : data.getMissiles()) {
                     Image otherMissileImage = "Player1".equals(data.getPlayerRole()) ? missileImage : hammerImage;
-                    g.drawImage(otherMissileImage, missile.getX()-20, missile.getY(), 20, 20, this);
+                    g.drawImage(otherMissileImage, missile.getX() - 20, missile.getY(), 20, 20, this);
                 }
 
-                // 다른 플레이어의 HP 표시
-                int hp = data.getHp();
-                drawHpBar(g, player.x, player.y, hp);
+                drawHpBar(g, player.x, player.y, data.getHp());
             }
         }
 
-        // 자신의 HP 표시
         drawHpBar(g, playerX, playerY, playerHP);
 
-        // 승리/패배에 따라 팝업 메시지 표시
         if (gameOver && !gameOverPopupShown) {
-            gameOverPopupShown = true; // 팝업이 한 번만 표시되도록 설정
+            gameOverPopupShown = true;
             String message = isWinner ? "게임 오버! You Win!" : "게임 오버! You Lose!";
             JOptionPane.showMessageDialog(this, message);
-            System.exit(0); // 게임 종료
+            System.exit(0);
         }
     }
 
-    private void  drawHpBar(Graphics g, int playerX, int playerY, int hp) {
+    private void drawHpBar(Graphics g, int playerX, int playerY, int hp) {
         int barWidth = 50;
         int barHeight = 5;
 
@@ -177,10 +157,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
 
     public void actionPerformed(ActionEvent e) {
         if (System.currentTimeMillis() - lastItemGenerationTime > ITEM_GENERATION_INTERVAL) {
-            generateRandomItems();  // 아이템 생성
-            lastItemGenerationTime = System.currentTimeMillis();  // 마지막 생성 시간 업데이트
+            lastItemGenerationTime = System.currentTimeMillis();
         }
-        checkItemExpiration();  // 아이템 만료 체크
         if (keys[KeyEvent.VK_LEFT]) {
             playerX -= speed;
             directionX = -1;
@@ -206,7 +184,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             lastDirectionY = directionY;
         }
         if (System.currentTimeMillis() > speedBoostEndTime) {
-            speed = 5; // 기본 속도로 복귀
+            speed = 5;
         }
 
         // X축 이동 제한 (맵 가로 경계)
@@ -227,7 +205,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             );
         }
 
-        // 미사일 업데이트
         missiles.forEach(Missile::update);
         missiles.removeIf(missile -> missile.isOutOfBounds(getWidth(), getHeight()));
 
@@ -239,51 +216,37 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
 
         detectCollisions();
-        checkItemCollisions();
         sendPlayerData();
         repaint();
     }
-    private void checkItemCollisions() {
-        synchronized (speedItems) {
-            for (SpeedItem item : speedItems) {
-                if (item.isActive() && item.getBounds().intersects(new Rectangle(playerX, playerY, 50, 50))) {
-                    item.deactivate();
-                    speed = 8; // 이동 속도 증가
-                    speedBoostEndTime = System.currentTimeMillis() + 5000; // 5초 지속
-                    sendItemPickupToServer(item); // 서버에 아이템 획득 알림
-                }
-            }
-        }
 
-        synchronized (hpItems) {
-            for (HpItem item : hpItems) {
-                if (item.isActive() && item.getBounds().intersects(new Rectangle(playerX, playerY, 50, 50))) {
-                    item.deactivate();
-                    playerHP = Math.min(playerHP + 2, 5); // HP를 최대 5까지만 증가
-                    sendItemPickupToServer(item); // 서버에 아이템 획득 알림
-                    repaint();
-                }
-            }
-        }
-    }
 
-    private void sendItemPickupToServer(Item item) {
+
+
+    private void sendItemRemovalToServer(GameData.Item item) {
         try {
-            List<Item> itemList = new ArrayList<>(); // 리스트 생성
-            itemList.add(item);  // 아이템을 리스트에 추가
-
-            out.writeObject(new GameData(playerRole, null, null, itemList, null, playerRole, playerHP));
+            // 제거된 아이템의 ID를 `itemRemoved`로 설정
+            GameData data = new GameData(
+                    clientId,
+                    null, // 플레이어 정보는 전달하지 않음
+                    null, // 미사일 정보는 전달하지 않음
+                    null, // 추가 아이템 없음
+                    "room_1", // 현재 방 ID
+                    playerRole,
+                    playerHP
+            );
+            data.setItemRemoved(item.getId()); // 제거된 아이템 ID 설정
+            out.writeObject(data); // 서버로 데이터 전송
             out.flush();
         } catch (IOException e) {
-            System.err.println("아이템 상태 전송 오류: " + e.getMessage());
+            System.err.println("아이템 제거 전송 오류: " + e.getMessage());
         }
     }
-
-
 
 
 
     private void detectCollisions() {
+        // 1. 미사일 충돌 처리
         synchronized (otherPlayers) {
             for (Iterator<Missile> it = missiles.iterator(); it.hasNext(); ) {
                 Missile missile = it.next();
@@ -291,8 +254,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                     Rectangle otherPlayer = data.getPlayer();
                     if (otherPlayer != null && missile.getX() >= otherPlayer.x && missile.getX() <= otherPlayer.x + otherPlayer.width &&
                             missile.getY() >= otherPlayer.y && missile.getY() <= otherPlayer.y + otherPlayer.height) {
-                        data.decreaseHp(1);  // 다른 플레이어 HP 감소
-                        it.remove();
+                        it.remove(); // 미사일 제거
+                        break; // 더 이상 충돌 체크 불필요
                     }
                 }
             }
@@ -305,29 +268,56 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                     Missile missile = it.next();
                     if (missile.getX() >= playerX && missile.getX() <= playerX + playerImage.getWidth(null) &&
                             missile.getY() >= playerY && missile.getY() <= playerY + playerImage.getHeight(null)) {
-                        playerHP--;  // 자신의 HP 감소
-                        it.remove();
-                        sendPlayerData();
+                        playerHP--; // 자신의 HP 감소
+                        it.remove(); // 미사일 제거
+                        sendPlayerData(); // 자신의 HP 정보 서버로 전송
                     }
                 }
             }
         }
 
-        // 플레이어의 HP가 0이면 게임 종료
+        // 2. 아이템 충돌 처리 (단순 제거 요청)
+        synchronized (items) {
+            Iterator<GameData.Item> itemIterator = items.iterator();
+            while (itemIterator.hasNext()) {
+                GameData.Item item = itemIterator.next();
+                Rectangle itemBounds = new Rectangle(item.getX(), item.getY(), 30, 30);
+                Rectangle playerBounds = new Rectangle(playerX, playerY, 50, 50);
+
+                if (itemBounds.intersects(playerBounds)) {
+                    if ("hp".equals(item.getType())) {
+                        if (playerHP < 5) { // HP가 5 미만일 경우에만 증가
+                            playerHP += 1; // HP 증가
+                            sendPlayerData(); // HP 정보 서버로 전송
+                        }
+                        sendPlayerData(); // HP 정보 서버로 전송
+                    } else if ("speed".equals(item.getType())) {
+                        speed = 8; // 이동 속도 증가
+                        speedBoostEndTime = System.currentTimeMillis() + 5000; // 5초 동안 지속
+                    }
+                    itemIterator.remove(); // 아이템 제거
+                    sendItemRemovalToServer(item); // 서버에 아이템 제거 요청
+                }
+            }
+        }
+
+
+
+        // 3. 플레이어의 HP가 0이면 게임 종료
         if (playerHP <= 0) {
             gameOver = true;
         }
     }
 
+
     private void sendPlayerData() {
         try {
-            String roomId = "room_1"; // 고정된 방 ID
             GameData data = new GameData(
                     clientId,
                     new Rectangle(playerX, playerY, playerImage.getWidth(null), playerImage.getHeight(null)),
                     new ArrayList<>(missiles),
-                    new ArrayList<>(speedItems),
-                    roomId,
+                    null, // 아이템 제거는 별도로 처리하므로 null
+                    "room_1", // 고정된 방 ID
                     playerRole,
                     playerHP
             );
@@ -343,6 +333,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             while (true) {
                 GameData serverData = (GameData) in.readObject();
 
+                // 다른 플레이어 정보 업데이트
                 synchronized (otherPlayers) {
                     if (serverData.getPlayer() == null) {
                         otherPlayers.remove(serverData.getClientId());
@@ -352,31 +343,34 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                 }
 
                 // 아이템 정보 업데이트
-                if (serverData.getSpeedItems() != null) {
-                    synchronized (speedItems) {
-                        speedItems.clear();
-                        speedItems.addAll(serverData.getSpeedItems());
+                synchronized (items) {
+                    if (serverData.getItems() != null) {
+                        items.addAll(serverData.getItems());
+                    }
+                    if (serverData.getItemRemoved() != null) {
+                        items.removeIf(item -> item.getId().equals(serverData.getItemRemoved()));
                     }
                 }
-                if (serverData.getHpItems() != null) {
-                    synchronized (hpItems) {
-                        hpItems.clear();
-                        hpItems.addAll(serverData.getHpItems());
-                    }
-                }
-
-                // 게임 종료 및 승리 정보
-                if (serverData.isGameOver()) {
-                    gameOver = true;
-                    isWinner = serverData.isWinner();
-                }
-
-                // 다른 플레이어의 HP 업데이트
                 synchronized (otherPlayers) {
                     GameData otherPlayerData = otherPlayers.get(serverData.getClientId());
                     if (otherPlayerData != null) {
-                        otherPlayerData.setHp(serverData.getHp());
+                        if (serverData.getClientId().equals(clientId)) {
+                            // 자신의 데이터인 경우 HP 동기화
+                            playerHP = serverData.getHp();
+                        } else {
+                            // 다른 플레이어 데이터 업데이트
+                            otherPlayerData.setHp(serverData.getHp());
+                        }
+
                     }
+                }
+
+
+
+                // 게임 종료 상태 처리
+                if (serverData.isGameOver()) {
+                    gameOver = true;
+                    isWinner = serverData.isWinner();
                 }
 
                 repaint(); // 화면 갱신
@@ -385,38 +379,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             System.err.println("서버와의 연결이 끊겼습니다: " + e.getMessage());
         }
     }
-
-    private void generateRandomItems() {
-        int x = random.nextInt(300) + 100; // 100 ~ 400 범위 (가로)
-        int y = random.nextInt(400) + 100; // 100 ~ 500 범위 (세로)
-
-        // 랜덤으로 SpeedItem 또는 HpItem 생성
-        if (random.nextBoolean()) {
-            SpeedItem newItem = new SpeedItem("speedItem_" + UUID.randomUUID().toString(), x, y);
-            synchronized (speedItems) {
-                speedItems.add(newItem);
-            }
-        } else {
-            HpItem newItem = new HpItem("hpItem_" + UUID.randomUUID().toString(), x, y);
-            synchronized (hpItems) {
-                hpItems.add(newItem);
-            }
-        }
-    }
-
-
-    private void checkItemExpiration() {
-        synchronized (speedItems) {
-            Iterator<SpeedItem> iterator = speedItems.iterator();
-            while (iterator.hasNext()) {
-                SpeedItem item = iterator.next();
-                if (!item.isActive()) {
-                    iterator.remove(); // 비활성화된 아이템 제거
-                }
-            }
-        }
-    }
-
 
 
 
