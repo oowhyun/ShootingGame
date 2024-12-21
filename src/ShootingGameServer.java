@@ -172,53 +172,13 @@ class Room {
     private static final long ITEM_LIFETIME = 10000; // 10초 후 아이템 파괴
     private static final int ITEM_SPAWN_INTERVAL = 5000; // 아이템 생성 주기 (5초마다 생성)
     private Timer itemTimer;
+    private final Set<GameData.Item> activeItems = Collections.synchronizedSet(new HashSet<>());
+    private final List<Point> recentItemLocations = new ArrayList<>(); // 최근 생성된 좌표 저장
+    private static final int MIN_DISTANCE_BETWEEN_ITEMS = 50; // 최소 거리
 
     public Room(String roomId) {
         this.roomId = roomId;
     }
-
-    private synchronized void spawnItem() {
-        Random random = new Random();
-        int x = random.nextInt(300) + 150; // X 범위: 100~500
-        int y;
-        do {
-            y = random.nextInt(300) + 150; // Y 범위: 150-450
-        } while (y >= 295 && y <= 305); // 250~270을 건너뛴다.
-        String itemType = random.nextBoolean() ? "speedDown" : "speed";
-
-        GameData.Item newItem = new GameData.Item(
-                "item" + UUID.randomUUID(),
-                new Rectangle(x, y, 30, 30),
-                itemType
-        );
-
-        // 아이템 정보를 모든 플레이어에게 전송
-        synchronized (players) {
-            for (ShootingGameServer.ClientHandler player : players) {
-                player.getGameData().addItem(newItem);
-            }
-        }
-
-        broadcastItemUpdate(newItem);
-        System.out.println("새 아이템 생성: " + newItem);
-
-        // 아이템 제거 예약
-        Timer removeTimer = new Timer();
-        removeTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                synchronized (players) {
-                    for (ShootingGameServer.ClientHandler player : players) {
-                        player.getGameData().removeItemById(newItem.getId());
-                    }
-                }
-                broadcastItemRemoval(newItem.getId());
-                System.out.println("아이템 제거됨: " + newItem.getId());
-            }
-        }, ITEM_LIFETIME);
-    }
-
-
 
     private void broadcastItemUpdate(GameData.Item newItem) {
         for (ShootingGameServer.ClientHandler player : players) {
@@ -273,7 +233,7 @@ class Room {
         itemTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                spawnItem();
+
             }
         }, 0, ITEM_SPAWN_INTERVAL);
     }

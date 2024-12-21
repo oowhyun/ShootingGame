@@ -2,6 +2,7 @@ import java.awt.*;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class GameData implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -115,6 +116,7 @@ public class GameData implements Serializable {
         this.gameStarted = gameStarted;
     }
 
+
     // 아이템 관련 메서드
     public List<Item> getItems() {
         return items;
@@ -125,8 +127,21 @@ public class GameData implements Serializable {
     }
 
     public void addItem(Item item) {
-        if (item != null) {
-            this.items.add(item);
+        boolean isDuplicate = false;
+
+        // 아이템이 이미 리스트에 있는지 확인
+        for (Item existingItem : items) {
+            if (existingItem.getId().equals(item.getId())) {
+                isDuplicate = true;
+                break;
+            }
+        }
+
+        if (!isDuplicate) {
+            items.add(item);
+            System.out.println("아이템 추가: " + item.getId());
+        } else {
+            System.out.println("중복 아이템 발견: " + item.getId());
         }
     }
 
@@ -233,5 +248,19 @@ public class GameData implements Serializable {
                     ", creationTime=" + creationTime +
                     '}';
         }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null || getClass() != obj.getClass()) return false;
+            Item item = (Item) obj;
+            return id != null && id.equals(item.id); // id로 비교
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(id); // id를 기준으로 해시 코드 생성
+        }
+
     }
 }

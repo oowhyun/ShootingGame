@@ -14,7 +14,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private final String clientId = "player_" + UUID.randomUUID();
 
     private long lastItemGenerationTime = 0;
-    private static final long ITEM_GENERATION_INTERVAL = 5000; // 5초
+    private static final long ITEM_GENERATION_INTERVAL = 9000;
     private Timer timer;
     private Image playerImage, backgroundImage, missileImage, hammerImage;
     private int playerX, playerY;
@@ -34,11 +34,11 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private int speed = 5; // 기본 이동 속도
     private long speedBoostEndTime = 0; // 속도 증가 지속 시간
 
-    private Image speedItemImage; // 아이템 이미지
-    private Image speedDownItemImage;  // heart.png 이미지
+    private Image speedItemImage;
+    private Image speedDownItemImage;
     private Image fanceImage;
     private Rectangle wallBounds; // 벽의 경계 영역
-    private final List<GameData.Item> items = new ArrayList<>(); // 수신한 아이템 목록
+    private final List<GameData.Item> items = new ArrayList<>();
 
 
     public ShootingGameClient() {
@@ -65,8 +65,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             backgroundImage = new ImageIcon("images/background.png").getImage();
             missileImage = new ImageIcon("images/starBullet.png").getImage();
             hammerImage = new ImageIcon("images/hammer.png").getImage();
-            speedItemImage = new ImageIcon("images/speed.png").getImage();
-            speedDownItemImage = new ImageIcon("images/heart.png").getImage();
+            speedItemImage = new ImageIcon("images/speedUp.png").getImage();
+            speedDownItemImage = new ImageIcon("images/speedDown.png").getImage();
 
             fanceImage = new ImageIcon("images/fance.png").getImage();
             // 울타리 크기 및 위치 조정
@@ -156,6 +156,9 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     }
 
     public void actionPerformed(ActionEvent e) {
+        if (System.currentTimeMillis() - lastItemGenerationTime > ITEM_GENERATION_INTERVAL && lastItemGenerationTime > 0) {
+            generateItems();
+        }
         if (System.currentTimeMillis() - lastItemGenerationTime > ITEM_GENERATION_INTERVAL) {
             lastItemGenerationTime = System.currentTimeMillis();
         }
@@ -188,19 +191,19 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
 
         // X축 이동 제한 (맵 가로 경계)
-        playerX = Math.max(20, Math.min(playerX, getWidth() - playerImage.getWidth(null)));
+        playerX = Math.max(5, Math.min(playerX, getWidth() - playerImage.getWidth(null)+30));
 
         // Y축 이동 제한 (플레이어 역할에 따른 영역 제한)
         if ("Player1".equals(playerRole)) {
             // Player1은 울타리 아래쪽에서만 이동 가능
             playerY = Math.max(
-                    wallBounds.y + wallBounds.height - 20, // 울타리 아래쪽 경계
-                    Math.min(playerY, getHeight() - playerImage.getHeight(null)) // 화면 하단 경계
+                    wallBounds.y + wallBounds.height - 5, // 울타리 아래쪽 경계
+                    Math.min(playerY, getHeight() - playerImage.getHeight(null)+30) // 화면 하단 경계
             );
         } else {
             // Player2는 울타리 위쪽에서만 이동 가능
             playerY = Math.max(
-                    20, // 화면 위쪽 경계
+                    10, // 화면 위쪽 경계
                     Math.min(playerY, wallBounds.y - 20) // 울타리 상단 경계까지 이동 가능
             );
         }
@@ -220,12 +223,9 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         repaint();
     }
 
-
-
-
     private void sendItemRemovalToServer(GameData.Item item) {
         try {
-            // 제거된 아이템의 ID를 `itemRemoved`로 설정
+            // 제거된 아이템의 ID를 itemRemoved로 설정
             GameData data = new GameData(
                     clientId,
                     null, // 플레이어 정보는 전달하지 않음
@@ -242,8 +242,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             System.err.println("아이템 제거 전송 오류: " + e.getMessage());
         }
     }
-
-
 
     private void detectCollisions() {
         // 1. 미사일 충돌 처리
@@ -298,13 +296,11 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             }
         }
 
-
         // 3. 플레이어의 HP가 0이면 게임 종료
         if (playerHP <= 0) {
             gameOver = true;
         }
     }
-
 
     private void sendPlayerData() {
         try {
@@ -323,6 +319,68 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             System.err.println("데이터 전송 오류: " + e.getMessage());
         }
     }
+
+    private void generateItems() {
+        // 5초마다 아이템을 두 개 생성
+        if (System.currentTimeMillis() - lastItemGenerationTime > ITEM_GENERATION_INTERVAL) {
+            lastItemGenerationTime = System.currentTimeMillis();
+
+            // 아이템 크기 설정
+            int itemWidth = 30;
+            int itemHeight = 30;
+
+            // 울타리 위쪽과 아래쪽 Y 위치 랜덤화
+            int upperY = (int) (Math.random() * (wallBounds.y)); // 울타리 위쪽에서 랜덤 위치
+            int lowerY = (int) (Math.random() * (getHeight() - wallBounds.y - wallBounds.height) + (wallBounds.y + wallBounds.height)); // 울타리 아래쪽에서 랜덤 위치
+
+            // X 위치는 화면 너비 내에서 랜덤으로 설정
+            int upperX = (int) (Math.random() * (getWidth() - itemWidth)); // 화면 너비 내에서 랜덤 위치
+            int lowerX = (int) (Math.random() * (getWidth() - itemWidth)); // 화면 너비 내에서 랜덤 위치
+
+            // 아이템 종류 랜덤 (speedUp, speedDown)
+            String[] itemTypes = {"speed", "speedDown"};
+            String itemType1 = itemTypes[(int) (Math.random() * itemTypes.length)];
+            String itemType2 = itemTypes[(int) (Math.random() * itemTypes.length)];
+
+            // Rectangle 객체로 bounds 생성
+            Rectangle bounds1 = new Rectangle(upperX, upperY, itemWidth, itemHeight);
+            Rectangle bounds2 = new Rectangle(lowerX, lowerY, itemWidth, itemHeight);
+
+            // 아이템 생성
+            GameData.Item item1 = new GameData.Item(UUID.randomUUID().toString(), bounds1, itemType1);
+            GameData.Item item2 = new GameData.Item(UUID.randomUUID().toString(), bounds2, itemType2);
+
+            // 생성된 아이템 리스트에 추가
+            synchronized (items) {
+                items.add(item1);
+                items.add(item2);
+            }
+
+            // 생성된 아이템 서버에 전송
+            sendItemToServer(item1);
+            sendItemToServer(item2);
+        }
+    }
+
+    private void sendItemToServer(GameData.Item item) {
+        try {
+            GameData data = new GameData(
+                    clientId,
+                    null, // 플레이어 정보는 전달하지 않음
+                    null, // 미사일 정보는 전달하지 않음
+                    Collections.singletonList(item), // 아이템 정보만 전송
+                    "room_1", // 현재 방 ID
+                    playerRole,
+                    playerHP
+            );
+            out.writeObject(data);
+            out.flush();
+        } catch (IOException e) {
+            System.err.println("아이템 전송 오류: " + e.getMessage());
+        }
+    }
+
+
 
     private void receiveData() {
         try {
