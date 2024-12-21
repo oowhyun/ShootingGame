@@ -35,7 +35,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private long speedBoostEndTime = 0; // 속도 증가 지속 시간
 
     private Image speedItemImage; // 아이템 이미지
-    private Image hpItemImage;  // heart.png 이미지
+    private Image speedDownItemImage;  // heart.png 이미지
     private Image fanceImage;
     private Rectangle wallBounds; // 벽의 경계 영역
     private final List<GameData.Item> items = new ArrayList<>(); // 수신한 아이템 목록
@@ -66,7 +66,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             missileImage = new ImageIcon("images/starBullet.png").getImage();
             hammerImage = new ImageIcon("images/hammer.png").getImage();
             speedItemImage = new ImageIcon("images/speed.png").getImage();
-            hpItemImage = new ImageIcon("images/heart.png").getImage();
+            speedDownItemImage = new ImageIcon("images/heart.png").getImage();
 
             fanceImage = new ImageIcon("images/fance.png").getImage();
             // 울타리 크기 및 위치 조정
@@ -105,7 +105,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
 
         synchronized (items) {
             for (GameData.Item item : items) {
-                Image itemImage = "speed".equals(item.getType()) ? speedItemImage : hpItemImage;
+                Image itemImage = "speed".equals(item.getType()) ? speedItemImage : speedDownItemImage;
                 g.drawImage(itemImage, item.getX(), item.getY(), 30, 30, this);
             }
         }
@@ -285,12 +285,9 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                 Rectangle playerBounds = new Rectangle(playerX, playerY, 50, 50);
 
                 if (itemBounds.intersects(playerBounds)) {
-                    if ("hp".equals(item.getType())) {
-                        if (playerHP < 5) { // HP가 5 미만일 경우에만 증가
-                            playerHP += 1; // HP 증가
-                            sendPlayerData(); // HP 정보 서버로 전송
-                        }
-                        sendPlayerData(); // HP 정보 서버로 전송
+                    if ("speedDown".equals(item.getType())) {
+                        speed = 2; // 이동 속도 증가
+                        speedBoostEndTime = System.currentTimeMillis() + 5000; // 5초 동안 지속
                     } else if ("speed".equals(item.getType())) {
                         speed = 8; // 이동 속도 증가
                         speedBoostEndTime = System.currentTimeMillis() + 5000; // 5초 동안 지속
@@ -300,7 +297,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                 }
             }
         }
-
 
 
         // 3. 플레이어의 HP가 0이면 게임 종료
@@ -345,12 +341,28 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                 // 아이템 정보 업데이트
                 synchronized (items) {
                     if (serverData.getItems() != null) {
-                        items.addAll(serverData.getItems());
+                        for (GameData.Item newItem : serverData.getItems()) {
+                            boolean exists = items.stream().anyMatch(existingItem -> existingItem.getId().equals(newItem.getId()));
+                            if (!exists) {
+                                items.add(newItem);
+                            }
+                        }
+                        System.out.println("수신된 아이템: " + serverData.getItems());
+
                     }
+
+                    // 제거 요청된 아이템 삭제
                     if (serverData.getItemRemoved() != null) {
                         items.removeIf(item -> item.getId().equals(serverData.getItemRemoved()));
                     }
+
+                    // 디버깅용: 현재 아이템 리스트 출력
+                    System.out.println("현재 아이템 리스트: " + items);
                 }
+
+
+
+                // 플레이어 HP 및 기타 정보 업데이트
                 synchronized (otherPlayers) {
                     GameData otherPlayerData = otherPlayers.get(serverData.getClientId());
                     if (otherPlayerData != null) {
@@ -361,11 +373,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                             // 다른 플레이어 데이터 업데이트
                             otherPlayerData.setHp(serverData.getHp());
                         }
-
                     }
                 }
-
-
 
                 // 게임 종료 상태 처리
                 if (serverData.isGameOver()) {
@@ -379,6 +388,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             System.err.println("서버와의 연결이 끊겼습니다: " + e.getMessage());
         }
     }
+
 
 
 

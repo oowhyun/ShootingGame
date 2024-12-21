@@ -179,9 +179,12 @@ class Room {
 
     private synchronized void spawnItem() {
         Random random = new Random();
-        int x = random.nextInt(400) + 100; // X 범위: 100~500
-        int y = random.nextInt(400) + 100; // Y 범위: 100~500
-        String itemType = random.nextBoolean() ? "hp" : "speed";
+        int x = random.nextInt(300) + 150; // X 범위: 100~500
+        int y;
+        do {
+            y = random.nextInt(300) + 150; // Y 범위: 150-450
+        } while (y >= 295 && y <= 305); // 250~270을 건너뛴다.
+        String itemType = random.nextBoolean() ? "speedDown" : "speed";
 
         GameData.Item newItem = new GameData.Item(
                 "item" + UUID.randomUUID(),
@@ -189,23 +192,39 @@ class Room {
                 itemType
         );
 
+        // 아이템 정보를 모든 플레이어에게 전송
         synchronized (players) {
             for (ShootingGameServer.ClientHandler player : players) {
-                player.getGameData().addItem(newItem); // addItem 메서드를 사용
-                player.getGameData().setNewItem(newItem); // 마지막 추가된 아이템 설정
+                player.getGameData().addItem(newItem);
             }
         }
 
         broadcastItemUpdate(newItem);
         System.out.println("새 아이템 생성: " + newItem);
+
+        // 아이템 제거 예약
+        Timer removeTimer = new Timer();
+        removeTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                synchronized (players) {
+                    for (ShootingGameServer.ClientHandler player : players) {
+                        player.getGameData().removeItemById(newItem.getId());
+                    }
+                }
+                broadcastItemRemoval(newItem.getId());
+                System.out.println("아이템 제거됨: " + newItem.getId());
+            }
+        }, ITEM_LIFETIME);
     }
+
 
 
     private void broadcastItemUpdate(GameData.Item newItem) {
         for (ShootingGameServer.ClientHandler player : players) {
             try {
                 GameData itemData = player.getGameData();
-                itemData.setNewItem(newItem);
+                itemData.addItem(newItem);
                 player.sendData(itemData);
             } catch (IOException e) {
                 System.out.println("아이템 정보 전송 오류: " + player.getClientId());
