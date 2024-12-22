@@ -3,7 +3,6 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.List;
-import java.util.Timer;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 
@@ -78,10 +77,10 @@ public class ShootingGameServer {
         public int getHp() {
             return hp;
         }
-        // HP setter
         public void setHp(int hp) {
             this.hp = hp;
         }
+
         public ClientHandler(Socket socket) {
             this.socket = socket;
             this.clientId = UUID.randomUUID().toString(); // clientId 생성
@@ -94,7 +93,6 @@ public class ShootingGameServer {
         public String getClientId() {
             return clientId;
         }
-
 
         public String getPlayerRole() {
             return playerRole;
@@ -121,13 +119,11 @@ public class ShootingGameServer {
                 while (true) {
                     GameData data = (GameData) in.readObject();
                     data.setClientId(clientId);
-
                     // HP 감소 처리
                     if (data.getHp() < hp) {
                         hp = data.getHp();
                         if (hp < 0) hp = 0;
                     }
-
                     room.processGameData(data, this);
                     room.checkGameOver();
                 }
@@ -167,23 +163,9 @@ public class ShootingGameServer {
 class Room {
     private final String roomId;
     private final List<ShootingGameServer.ClientHandler> players = new ArrayList<>(2);
-    private static final int ITEM_SPAWN_INTERVAL = 5000; // 아이템 생성 주기 (5초마다 생성)
-    private Timer itemTimer;
 
     public Room(String roomId) {
         this.roomId = roomId;
-    }
-
-    private void broadcastItemUpdate(GameData.Item newItem) {
-        for (ShootingGameServer.ClientHandler player : players) {
-            try {
-                GameData itemData = player.getGameData();
-                itemData.addItem(newItem);
-                player.sendData(itemData);
-            } catch (IOException e) {
-                System.out.println("아이템 정보 전송 오류: " + player.getClientId());
-            }
-        }
     }
 
     private void broadcastItemRemoval(String itemId) {
@@ -202,7 +184,6 @@ class Room {
         if (players.size() < 2) {
             players.add(player);
             if (players.size() == 2) {
-                startItemManagement();
                 broadcastGameStart();
             }
         }
@@ -218,18 +199,6 @@ class Room {
                 System.out.println("게임 시작 메시지 전송 오류: " + player.getClientId());
             }
         }
-    }
-
-    private synchronized void startItemManagement() {
-        if (itemTimer != null) return;
-
-        itemTimer = new Timer();
-        itemTimer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-
-            }
-        }, 0, ITEM_SPAWN_INTERVAL);
     }
 
     public synchronized void removePlayer(ShootingGameServer.ClientHandler player) {
