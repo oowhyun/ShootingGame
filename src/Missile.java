@@ -5,8 +5,8 @@ public class Missile implements Serializable {
     private int x, y;
     private int speed = 10;
     private int directionX, directionY;
-    private int width = 15; // 미사일의 기본 너비
-    private int height = 20; // 미사일의 기본 높이
+    private int width = 15;
+    private int height = 20;
     private boolean processed = false;
 
     public boolean isProcessed() {
@@ -24,10 +24,10 @@ public class Missile implements Serializable {
         this.directionY = directionY;
     }
 
-    // 미사일 위치를 업데이트하는 메서드
+    // 플레이어가 바라보는 방향으로 미사일 발사
     public void update() {
-        x += directionX * speed; // directionX에 따라 수평으로 이동
-        y += directionY * speed; // directionY에 따라 수직으로 이동
+        x += directionX * speed;
+        y += directionY * speed;
     }
 
     // 현재 x 좌표 반환

@@ -11,10 +11,10 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private Socket socket;
     private ObjectOutputStream out;
     private ObjectInputStream in;
-    private final String clientId = "player_" + UUID.randomUUID();
+    private final String clientId = "player_" + UUID.randomUUID(); // 클라이언트 고유 아이디 생성
 
     private long lastItemGenerationTime = 0;
-    private static final long ITEM_GENERATION_INTERVAL = 9000;
+    private static final long ITEM_GENERATION_INTERVAL = 9000; // 아이템 생성 주기
     private Timer timer;
     private Image playerImage, backgroundImage, missileImage, hammerImage;
     private int playerX, playerY;
@@ -32,14 +32,12 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
     private int lastDirectionY = -1; // 마지막 Y 방향 (기본적으로 위쪽)
     private int playerHP = 5;  // 자신의 HP
     private int speed = 5; // 기본 이동 속도
-    private long speedBoostEndTime = 0; // 속도 증가 지속 시간
-
+    private long speedBoostEndTime = 0; // 속도 아이템 종료 시간
     private Image speedItemImage;
     private Image speedDownItemImage;
     private Image fanceImage;
     private Rectangle wallBounds; // 벽의 경계 영역
     private final List<GameData.Item> items = new ArrayList<>();
-
 
     public ShootingGameClient() {
         try {
@@ -67,8 +65,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             hammerImage = new ImageIcon("images/hammer.png").getImage();
             speedItemImage = new ImageIcon("images/speedUp.png").getImage();
             speedDownItemImage = new ImageIcon("images/speedDown.png").getImage();
-
             fanceImage = new ImageIcon("images/fance.png").getImage();
+
             // 울타리 크기 및 위치 조정
             int wallWidth = 500;  // 울타리의 너비 (맵 가로 크기와 동일)
             int wallHeight = 80;  // 울타리의 높이 (기존보다 더 높게 설정)
@@ -76,11 +74,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             int wallY = (600 / 2) - (wallHeight / 2);  // 맵 높이의 절반에서 울타리 높이의 절반만큼 뺌 (정중앙 배치)
 
             wallBounds = new Rectangle(wallX, wallY, wallWidth, wallHeight);
-
-
             keys = new boolean[256];
             missiles = new ArrayList<>();
-
             timer = new Timer(5, this);
             timer.start();
 
@@ -96,13 +91,15 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
     }
 
+    // 화면 렌더링
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
-        g.drawImage(backgroundImage, 0, 0, 500, 600, this);
 
+        g.drawImage(backgroundImage, 0, 0, 500, 600, this);
         g.drawImage(fanceImage, wallBounds.x, wallBounds.y, wallBounds.width, wallBounds.height, this);
         g.drawImage(playerImage, playerX, playerY, 50, 50, this);
 
+        // 아이템
         synchronized (items) {
             for (GameData.Item item : items) {
                 Image itemImage = "speed".equals(item.getType()) ? speedItemImage : speedDownItemImage;
@@ -110,11 +107,13 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             }
         }
 
+        // 미사일
         for (Missile missile : missiles) {
             Image currentMissileImage = "Player1".equals(playerRole) ? missileImage : hammerImage;
             g.drawImage(currentMissileImage, missile.getX() - 20, missile.getY(), 20, 20, this);
         }
 
+        // 클라이언트 기준 상대 플레이어
         synchronized (otherPlayers) {
             for (GameData data : otherPlayers.values()) {
                 Rectangle player = data.getPlayer();
@@ -133,17 +132,20 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             }
         }
 
+        // 자신의 HP바
         drawHpBar(g, playerX, playerY, playerHP);
 
+        // 게임 오버 시 팝업 출력
         if (gameOver && !gameOverPopupShown) {
             gameOverPopupShown = true;
-            String message = isWinner ? "게임 오버! You Win!" : "게임 오버! You Lose!";//게임 종료시 팝업 표시해줌
+            String message = isWinner ? "게임 오버! You Win!" : "게임 오버! You Lose!"; // 게임 종료시 팝업 표시해줌
             JOptionPane.showMessageDialog(this, message);
             System.exit(0);
         }
     }
 
-    private void drawHpBar(Graphics g, int playerX, int playerY, int hp) { //캐릭터 위 hp바
+    // 캐릭터 위 hp바
+    private void drawHpBar(Graphics g, int playerX, int playerY, int hp) {
         int barWidth = 50;
         int barHeight = 5;
 
@@ -155,6 +157,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         g.fillRect(playerX, playerY - 10, currentBarWidth, barHeight);
     }
 
+    // 게임 내 동적 요소 (이동 및 미사일)
     public void actionPerformed(ActionEvent e) {
         if (System.currentTimeMillis() - lastItemGenerationTime > ITEM_GENERATION_INTERVAL && lastItemGenerationTime > 0) {
             generateItems();
@@ -223,6 +226,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         repaint();
     }
 
+    // 제거된 아이템을 서버를 통해 다른 클라이언트에게 전달
     private void sendItemRemovalToServer(GameData.Item item) {
         try {
             // 제거된 아이템의 ID를 itemRemoved로 설정
@@ -243,6 +247,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
     }
 
+    // 충돌 관련 함수
     private void detectCollisions() {
         // 1. 미사일 충돌 처리
         synchronized (otherPlayers) {
@@ -302,6 +307,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
     }
 
+    // 서버로 플레이어 데이터 전달
     private void sendPlayerData() {
         try {
             GameData data = new GameData(
@@ -320,8 +326,9 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
     }
 
+    // 아이템 생성 함수
     private void generateItems() {
-        // 5초마다 아이템을 두 개 생성
+        // 일정 시간마다 아이템을 두 개 생성
         if (System.currentTimeMillis() - lastItemGenerationTime > ITEM_GENERATION_INTERVAL) {
             lastItemGenerationTime = System.currentTimeMillis();
 
@@ -362,6 +369,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
     }
 
+    // 서버로 아이템 전달
     private void sendItemToServer(GameData.Item item) {
         try {
             GameData data = new GameData(
@@ -380,8 +388,7 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
         }
     }
 
-
-
+    // 서버로부터 데이터 수신
     private void receiveData() {
         try {
             while (true) {
@@ -405,8 +412,6 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                                 items.add(newItem);
                             }
                         }
-                        System.out.println("수신된 아이템: " + serverData.getItems());
-
                     }
 
                     // 제거 요청된 아이템 삭제
@@ -415,10 +420,8 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                     }
 
                     // 디버깅용: 현재 아이템 리스트 출력
-                    System.out.println("현재 아이템 리스트: " + items);
+                    // System.out.println("현재 아이템 리스트: " + items);
                 }
-
-
 
                 // 플레이어 HP 및 기타 정보 업데이트
                 synchronized (otherPlayers) {
@@ -439,16 +442,12 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
                     gameOver = true;
                     isWinner = serverData.isWinner();
                 }
-
                 repaint(); // 화면 갱신
             }
         } catch (IOException | ClassNotFoundException e) {
             System.err.println("서버와의 연결이 끊겼습니다: " + e.getMessage());
         }
     }
-
-
-
 
     // 키 이벤트 처리
     public void keyPressed(KeyEvent e) {
@@ -458,16 +457,15 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
             shootMissile();
         }
     }
-
     public void keyReleased(KeyEvent e) {
         keys[e.getKeyCode()] = false;
         if (e.getKeyCode() == KeyEvent.VK_SPACE) {
             isSpacePressed = false;
         }
     }
-
     public void keyTyped(KeyEvent e) {}
 
+    // 미사일 발사
     private void shootMissile() {
         int missileX = playerX + playerImage.getWidth(null) / 2 - missileImage.getWidth(null) / 2;
         int missileY = playerY + playerImage.getHeight(null) / 2 - missileImage.getHeight(null) / 2;
