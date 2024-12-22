@@ -6,14 +6,12 @@ import java.util.List;
 import java.util.Timer;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
-import java.util.Random;
 
 public class ShootingGameServer {
     private static final int PORT = 12345;
     private final List<Room> rooms = Collections.synchronizedList(new ArrayList<>());
     private final Map<String, Room> clientRoomMap = Collections.synchronizedMap(new HashMap<>());
     private final ServerGUI gui;
-    private Random random = new Random();
 
     public ShootingGameServer() {
         gui = new ServerGUI();
@@ -169,12 +167,8 @@ public class ShootingGameServer {
 class Room {
     private final String roomId;
     private final List<ShootingGameServer.ClientHandler> players = new ArrayList<>(2);
-    private static final long ITEM_LIFETIME = 10000; // 10초 후 아이템 파괴
     private static final int ITEM_SPAWN_INTERVAL = 5000; // 아이템 생성 주기 (5초마다 생성)
     private Timer itemTimer;
-    private final Set<GameData.Item> activeItems = Collections.synchronizedSet(new HashSet<>());
-    private final List<Point> recentItemLocations = new ArrayList<>(); // 최근 생성된 좌표 저장
-    private static final int MIN_DISTANCE_BETWEEN_ITEMS = 50; // 최소 거리
 
     public Room(String roomId) {
         this.roomId = roomId;
@@ -290,10 +284,6 @@ class Room {
 
             Rectangle itemBounds = new Rectangle(item.getX(), item.getY(), 30, 30);
             if (data.getPlayer().intersects(itemBounds)) {
-                if ("hp".equals(item.getType())) {
-                    sender.setHp(Math.min(sender.getHp() + 1, 5)); // HP 최대값 5
-                }
-
                 item.setProcessed(true); // 아이템 처리 완료
                 iterator.remove();
                 broadcastItemRemoval(item.getId());

@@ -5,7 +5,7 @@ public class Missile implements Serializable {
     private int x, y;
     private int speed = 10;
     private int directionX, directionY;
-    private int width = 20; // 미사일의 기본 너비
+    private int width = 15; // 미사일의 기본 너비
     private int height = 20; // 미사일의 기본 높이
     private boolean processed = false;
 

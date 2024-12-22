@@ -137,13 +137,13 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
 
         if (gameOver && !gameOverPopupShown) {
             gameOverPopupShown = true;
-            String message = isWinner ? "게임 오버! You Win!" : "게임 오버! You Lose!";
+            String message = isWinner ? "게임 오버! You Win!" : "게임 오버! You Lose!";//게임 종료시 팝업 표시해줌
             JOptionPane.showMessageDialog(this, message);
             System.exit(0);
         }
     }
 
-    private void drawHpBar(Graphics g, int playerX, int playerY, int hp) {
+    private void drawHpBar(Graphics g, int playerX, int playerY, int hp) { //캐릭터 위 hp바
         int barWidth = 50;
         int barHeight = 5;
 
@@ -284,10 +284,10 @@ public class ShootingGameClient extends JPanel implements ActionListener, KeyLis
 
                 if (itemBounds.intersects(playerBounds)) {
                     if ("speedDown".equals(item.getType())) {
-                        speed = 2; // 이동 속도 증가
+                        speed = 2; // 이동 속도 감소
                         speedBoostEndTime = System.currentTimeMillis() + 5000; // 5초 동안 지속
                     } else if ("speed".equals(item.getType())) {
-                        speed = 8; // 이동 속도 증가
+                        speed = 7; // 이동 속도 증가
                         speedBoostEndTime = System.currentTimeMillis() + 5000; // 5초 동안 지속
                     }
                     itemIterator.remove(); // 아이템 제거

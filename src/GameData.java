@@ -238,7 +238,7 @@ public class GameData implements Serializable {
         }
 
         @Override
-        public String toString() {
+        public String toString() { //아이템 전달 확인용 코드
             return "Item{" +
                     "id='" + id + '\'' +
                     ", x=" + x +
